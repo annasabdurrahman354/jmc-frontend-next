@@ -172,7 +172,7 @@ export default function TunjanganTransportPage() {
       <PageHeader
         title="Tunjangan Transport"
         actions={
-          <RoleGuard modul="Modul Tunjangan Transport" action="create">
+          <RoleGuard modul="Setting Tunjangan Transport" action="create">
             <Button onClick={() => setAddOpen(true)}>
               <Plus className="size-4" />
               Buat Bulan Baru

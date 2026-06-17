@@ -62,7 +62,7 @@ function SettingFormDialog({
     reset,
     formState: { errors },
   } = useForm<SettingTunjanganInput>({
-    resolver: zodResolver(settingTunjanganSchema),
+    resolver: zodResolver(settingTunjanganSchema) as any,
     defaultValues: { minKm: 5, maxKm: 25 },
   });
 

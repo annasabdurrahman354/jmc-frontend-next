@@ -87,6 +87,7 @@ export function FotoUploader({ onChange, currentPhotoUrl, error }: Props) {
               fill
               className="object-cover"
               sizes="128px"
+              unoptimized
             />
             <button
               type="button"

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/lib/auth/store";
 import { configureAuth, resetRedirectFlag } from "@/lib/api/client";
-import { useSessionTimer, useActivityTracker } from "@/lib/auth/session";
+import { useSessionTimer, useActivityTracker, extendSession } from "@/lib/auth/session";
 import { SessionWarningDialog } from "./session-warning-dialog";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -12,10 +12,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const token = useAuthStore((s) => s.token);
   const clear = useAuthStore((s) => s.clear);
+  const rememberMe = useAuthStore((s) => s.rememberMe);
   const [hydrated, setHydrated] = useState(false);
   const { showWarning, msLeft } = useSessionTimer();
   useActivityTracker();
 
+  // Konfigurasi axios auth interceptor
   useEffect(() => {
     configureAuth({
       getToken: () => useAuthStore.getState().token,
@@ -25,11 +27,21 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Hydration & reset flag
   useEffect(() => {
     setHydrated(true);
     resetRedirectFlag();
+
+    // Reset lastActivity ke now saat mount supaya sesi tidak langsung expired
+    // karena lastActivity yang tersimpan di localStorage mungkin stale.
+    // Hanya lakukan ini jika token masih ada (pengguna masih login).
+    if (!rememberMe && useAuthStore.getState().token) {
+      useAuthStore.getState().touch();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Redirect ke login jika tidak ada token
   useEffect(() => {
     if (hydrated && !token) {
       const url = new URL(window.location.href);
@@ -52,7 +64,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      <SessionWarningDialog open={showWarning} msLeft={msLeft} onExtend={() => useAuthStore.getState().touch()} onLogout={clear} />
+      <SessionWarningDialog
+        open={showWarning}
+        msLeft={msLeft}
+        onExtend={extendSession}
+        onLogout={clear}
+      />
     </>
   );
 }

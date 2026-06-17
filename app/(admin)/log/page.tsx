@@ -22,53 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-function Pagination({
-  page,
-  totalPages,
-  onPage,
-  total,
-}: {
-  page: number;
-  totalPages: number;
-  onPage: (p: number) => void;
-  total: number;
-}) {
-  if (totalPages <= 1)
-    return <div className="text-muted-foreground text-xs">Total {total} log</div>;
-
-  const pages: number[] = [];
-  const start = Math.max(1, page - 2);
-  const end = Math.min(totalPages, start + 4);
-  for (let i = start; i <= end; i++) pages.push(i);
-
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <div className="text-muted-foreground text-xs">
-        Hal {page} dari {totalPages} ({total} data)
-      </div>
-      <ul className="flex items-center gap-1">
-        <li>
-          <Button variant="outline" size="icon-sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-            <ChevronLeft className="size-4" />
-          </Button>
-        </li>
-        {pages.map((p) => (
-          <li key={p}>
-            <Button variant={p === page ? "default" : "outline"} size="icon-sm" onClick={() => onPage(p)}>
-              {p}
-            </Button>
-          </li>
-        ))}
-        <li>
-          <Button variant="outline" size="icon-sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>
-            <ChevronRight className="size-4" />
-          </Button>
-        </li>
-      </ul>
-    </div>
-  );
-}
+import { TablePagination } from "@/components/ui/table-pagination";
 
 const MODULE_OPTIONS = [
   "Auth", "Dashboard", "Kelola Role", "Kelola User", "My Profile",
@@ -260,11 +214,12 @@ export default function LogPage() {
           </Table>
         </CardContent>
         <div className="border-t p-3">
-          <Pagination
+          <TablePagination
             page={meta.page}
             totalPages={meta.totalPages}
             onPage={setPage}
             total={meta.total}
+            label="log"
           />
         </div>
       </Card>

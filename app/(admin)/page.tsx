@@ -1,7 +1,7 @@
 "use client";
 
+import * as React from "react";
 import Image from "next/image";
-import Link from "next/link";
 import {
   Briefcase,
   GraduationCap,
@@ -28,89 +28,118 @@ import {
 import { LinkButton } from "@/components/ui/link-button";
 import { PageHeader } from "@/components/layout/page-header";
 
+import { Cell, Label, Pie, PieChart } from "recharts";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+
 const DONUT_PALETTE_PRIMARY = ["#549CE3", "#2B508E", "#FE7E00"];
 const DONUT_PALETTE_GENDER = ["#2B508E", "#FE7E00"];
 
 function DonutChart({
   data,
   colors,
-  size = 160,
 }: {
   data: { label: string; value: number }[];
   colors: string[];
-  size?: number;
 }) {
-  const total = data.reduce((sum, d) => sum + d.value, 0);
-  const radius = 60;
-  const stroke = 22;
-  const circumference = 2 * Math.PI * radius;
+  const chartData = React.useMemo(() => {
+    return data.map((d, idx) => ({
+      name: d.label,
+      value: d.value,
+      fill: colors[idx % colors.length],
+    }));
+  }, [data, colors]);
 
-  const segments = data.reduce<{
-    items: { color: string; dashArray: string; offset: number }[];
-    cursor: number;
-  }>(
-    (acc, slice) => {
-      const fraction = total === 0 ? 0 : slice.value / total;
-      const length = circumference * fraction;
-      acc.items.push({
-        color: colors[acc.items.length % colors.length],
-        dashArray: `${length} ${circumference - length}`,
-        offset: acc.cursor,
-      });
-      acc.cursor += length;
-      return acc;
-    },
-    { items: [], cursor: 0 },
-  );
+  const total = React.useMemo(() => {
+    return data.reduce((sum, d) => sum + d.value, 0);
+  }, [data]);
+
+  const chartConfig = React.useMemo(() => {
+    const config: ChartConfig = {
+      value: {
+        label: "Total",
+      },
+    };
+    data.forEach((d, idx) => {
+      config[d.label] = {
+        label: d.label,
+        color: colors[idx % colors.length],
+      };
+    });
+    return config;
+  }, [data, colors]);
 
   return (
-    <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
-      <svg width={size} height={size} viewBox="0 0 160 160">
-        <g transform="translate(80 80) rotate(-90)">
-          {segments.items.map((s, i) => (
-            <circle
-              key={i}
-              r={radius}
-              fill="transparent"
-              stroke={s.color}
-              strokeWidth={stroke}
-              strokeDasharray={s.dashArray}
-              strokeDashoffset={-s.offset}
+    <div className="flex flex-col items-center justify-center w-full">
+      <ChartContainer
+        config={chartConfig}
+        className="mx-auto aspect-square max-h-[220px] w-full"
+      >
+        <PieChart>
+          <ChartTooltip
+            cursor={false}
+            content={<ChartTooltipContent hideLabel />}
+          />
+          <Pie
+            data={chartData}
+            dataKey="value"
+            nameKey="name"
+            innerRadius={65}
+            outerRadius={85}
+            strokeWidth={2}
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.fill} />
+            ))}
+            <Label
+              content={({ viewBox }) => {
+                if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                  return (
+                    <text
+                      x={viewBox.cx}
+                      y={viewBox.cy}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      <tspan
+                        x={viewBox.cx}
+                        y={viewBox.cy}
+                        className="fill-foreground text-3xl font-extrabold"
+                      >
+                        {total.toLocaleString()}
+                      </tspan>
+                      <tspan
+                        x={viewBox.cx}
+                        y={(viewBox.cy || 0) + 20}
+                        className="fill-muted-foreground text-[10px] font-medium uppercase tracking-wider"
+                      >
+                        Pegawai
+                      </tspan>
+                    </text>
+                  );
+                }
+              }}
             />
-          ))}
-        </g>
-        <text
-          x="80"
-          y="78"
-          textAnchor="middle"
-          className="fill-foreground text-2xl font-semibold"
-        >
-          {total}
-        </text>
-        <text
-          x="80"
-          y="96"
-          textAnchor="middle"
-          className="fill-muted-foreground text-[10px]"
-        >
-          Total
-        </text>
-      </svg>
-      <ul className="space-y-1.5 text-sm">
-        {data.map((d, i) => (
-          <li key={d.label} className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className="inline-block size-3 rounded-sm"
-              style={{ background: colors[i % colors.length] }}
+          </Pie>
+        </PieChart>
+      </ChartContainer>
+      <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
+        {data.map((d, idx) => (
+          <div key={d.label} className="flex items-center gap-1.5">
+            <div
+              className="h-3 w-3 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: colors[idx % colors.length] }}
             />
-            <span>
-              {d.label}{" "}
-              <span className="text-muted-foreground">({d.value})</span>
+            <span className="text-muted-foreground font-medium">
+              {d.label} <strong className="text-foreground font-semibold">({d.value})</strong>
             </span>
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }

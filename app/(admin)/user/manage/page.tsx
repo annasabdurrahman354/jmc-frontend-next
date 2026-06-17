@@ -25,12 +25,13 @@ import { useAuthStore } from "@/lib/auth/store";
 import { userCreateSchema, type UserCreateInput } from "@/lib/schemas/user";
 import { generatePassword } from "@/lib/utils/password-generator";
 import { applyServerErrors } from "@/lib/utils";
-import type { ApiResponse, PaginatedResponse, Pegawai, RoleSummary, User } from "@/lib/api/types";
+import type { ApiResponse, PaginatedResponse, RoleSummary, User } from "@/lib/api/types";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PegawaiSelect } from "@/components/form/pegawai-select";
 import {
   Table,
   TableBody,
@@ -66,75 +67,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { RoleGuard } from "@/components/auth/role-guard";
-
-function Pagination({
-  page,
-  totalPages,
-  onPage,
-  total,
-  limit,
-}: {
-  page: number;
-  totalPages: number;
-  onPage: (p: number) => void;
-  total: number;
-  limit: number;
-}) {
-  if (totalPages <= 1) {
-    return (
-      <div className="text-muted-foreground text-xs">
-        Total {total} data
-      </div>
-    );
-  }
-  const pages: number[] = [];
-  const start = Math.max(1, page - 2);
-  const end = Math.min(totalPages, start + 4);
-  for (let i = start; i <= end; i++) pages.push(i);
-
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <div className="text-muted-foreground text-xs">
-        Menampilkan halaman {page} dari {totalPages} ({total} data)
-      </div>
-      <ul className="flex items-center gap-1">
-        <li>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-            aria-label="Previous page"
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-        </li>
-        {pages.map((p) => (
-          <li key={p}>
-            <Button
-              variant={p === page ? "default" : "outline"}
-              size="icon-sm"
-              onClick={() => onPage(p)}
-            >
-              {p}
-            </Button>
-          </li>
-        ))}
-        <li>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={page >= totalPages}
-            onClick={() => onPage(page + 1)}
-            aria-label="Next page"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </li>
-      </ul>
-    </div>
-  );
-}
+import { TablePagination } from "@/components/ui/table-pagination";
 
 function UserFormDialog({
   open,
@@ -145,20 +78,6 @@ function UserFormDialog({
   onOpenChange: (v: boolean) => void;
   onSaved: () => void;
 }) {
-  const [searchPegawai, setSearchPegawai] = useState("");
-  const debouncedSearch = useDebounce(searchPegawai, 300);
-
-  const { data: pegawaiList } = useQuery<Pegawai[], Error>({
-    queryKey: ["pegawai", "autocomplete", debouncedSearch],
-    queryFn: async () => {
-      const res = await api.get<ApiResponse<Pegawai[]>>(
-        `/pegawai?search=${encodeURIComponent(debouncedSearch)}&limit=20`,
-      );
-      return res.data.data;
-    },
-    enabled: debouncedSearch.length >= 2,
-  });
-
   const { data: roles } = useQuery<RoleSummary[], Error>({
     queryKey: ["roles"],
     queryFn: async () => {
@@ -204,8 +123,6 @@ function UserFormDialog({
   const usernameVal = watch("username");
   const passwordVal = watch("password");
 
-  const selectedPegawai = pegawaiList?.find((p) => p.id === Number(idPegawai));
-
   const onSubmit = (data: UserCreateInput) => {
     createUser(data);
   };
@@ -222,63 +139,13 @@ function UserFormDialog({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <FieldGroup>
             <Field>
-              <FieldLabel>Cari Pegawai</FieldLabel>
-              <div className="space-y-2">
-                <Input
-                  placeholder="Ketik minimal 2 karakter nama/NIP..."
-                  value={searchPegawai}
-                  onChange={(e) => setSearchPegawai(e.target.value)}
-                />
-                {pegawaiList && pegawaiList.length > 0 && (
-                  <div className="max-h-40 overflow-y-auto rounded-md border">
-                    {pegawaiList
-                      .filter((p) => !p.user)
-                      .map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setValue("idPegawai", p.id, { shouldValidate: true });
-                            setSearchPegawai(`${p.nip} - ${p.namaPegawai}`);
-                          }}
-                          className={`hover:bg-muted w-full px-3 py-2 text-left text-sm ${
-                            Number(idPegawai) === p.id ? "bg-muted" : ""
-                          }`}
-                        >
-                          <div className="font-medium">{p.namaPegawai}</div>
-                          <div className="text-muted-foreground text-xs">
-                            NIP: {p.nip} · {p.jabatan?.nama}
-                          </div>
-                        </button>
-                      ))}
-                    {pegawaiList.every((p) => p.user) && (
-                      <div className="text-muted-foreground p-3 text-xs">
-                        Semua pegawai yang ditemukan sudah punya akun user.
-                      </div>
-                    )}
-                  </div>
-                )}
-                {selectedPegawai && (
-                  <div className="bg-muted/30 flex items-center justify-between rounded-md px-3 py-2 text-sm">
-                    <div>
-                      <div className="font-medium">{selectedPegawai.namaPegawai}</div>
-                      <div className="text-muted-foreground text-xs">
-                        NIP: {selectedPegawai.nip}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setValue("idPegawai", 0);
-                        setSearchPegawai("");
-                      }}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="size-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
+              <FieldLabel>Nama Pegawai</FieldLabel>
+              <PegawaiSelect
+                value={idPegawai ?? null}
+                onChange={(p) => setValue("idPegawai", p ? p.id : 0, { shouldValidate: true })}
+                excludeWithUser
+                error={errors.idPegawai?.message}
+              />
               {errors.idPegawai && (
                 <FieldError errors={[{ message: errors.idPegawai.message }]} />
               )}
@@ -704,12 +571,12 @@ export default function UserManagePage() {
           </Table>
         </CardContent>
         <div className="border-t p-3">
-          <Pagination
+          <TablePagination
             page={meta.page}
             totalPages={meta.totalPages}
             onPage={setPage}
             total={meta.total}
-            limit={meta.limit}
+            label="user"
           />
         </div>
       </Card>

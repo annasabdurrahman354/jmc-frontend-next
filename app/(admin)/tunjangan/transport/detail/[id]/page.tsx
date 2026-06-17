@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dayjs from "dayjs";
 import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,7 +10,7 @@ import { api } from "@/lib/api/client";
 import { ENDPOINTS } from "@/lib/api/endpoints";
 import { formatRupiah } from "@/lib/utils";
 import { formatDateID } from "@/lib/utils";
-import type { ApiResponse, TunjanganBulanDetail } from "@/lib/api/types";
+import type { ApiResponse, SettingTunjangan, TunjanganBulanDetail } from "@/lib/api/types";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { BackButton } from "@/components/layout/back-button";
@@ -23,17 +24,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { RoleGuard } from "@/components/auth/role-guard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 
 const BULAN_NAMES = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -51,6 +51,123 @@ function SortIcon({ field, sortBy, sortOrder }: { field: SortField; sortBy: Sort
   );
 }
 
+// ─── Hitung Dialog ──────────────────────────────────────────────────────────
+function HitungTunjanganDialog({
+  open,
+  onOpenChange,
+  bulan,
+  tahun,
+  onConfirm,
+  loading,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  bulan: number;
+  tahun: number;
+  onConfirm: () => void;
+  loading: boolean;
+}) {
+  const bulanName = BULAN_NAMES[(bulan ?? 1) - 1] ?? `Bulan ${bulan}`;
+
+  const { data: settings, isLoading: loadingSetting } = useQuery<SettingTunjangan[], Error>({
+    queryKey: ["settingTunjangan"],
+    queryFn: async () => {
+      const res = await api.get<ApiResponse<SettingTunjangan[]>>(ENDPOINTS.settingTunjangan.list);
+      return res.data.data;
+    },
+    enabled: open,
+  });
+
+  const activeSetting = React.useMemo(() => {
+    if (!settings || settings.length === 0) return null;
+    const periodStart = dayjs(`${tahun}-${String(bulan).padStart(2, "0")}-01`);
+    return (
+      settings
+        .filter((s) => {
+          const dateOnly = dayjs(s.berlakuMulai.split(/[T ]/)[0]);
+          return dateOnly.isSame(periodStart) || dateOnly.isBefore(periodStart);
+        })
+        .sort((a, b) => {
+          const dateA = dayjs(a.berlakuMulai.split(/[T ]/)[0]);
+          const dateB = dayjs(b.berlakuMulai.split(/[T ]/)[0]);
+          return dateB.valueOf() - dateA.valueOf();
+        })[0] ?? null
+    );
+  }, [settings, tahun, bulan]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Hitung Tunjangan Transport</DialogTitle>
+          <DialogDescription>
+            Sistem akan menghitung ulang tunjangan transport untuk periode{" "}
+            <strong>{bulanName} {tahun}</strong>. Hasil perhitungan sebelumnya akan ditimpa.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {/* Active setting tunjangan */}
+          <div>
+            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide mb-1">
+              Tarif Berlaku
+            </p>
+            <div className="bg-muted/40 rounded-md border p-3 text-sm">
+              {loadingSetting ? (
+                <p className="text-muted-foreground">Memuat setting tunjangan...</p>
+              ) : activeSetting ? (
+                <dl className="grid grid-cols-2 gap-y-1 gap-x-3">
+                  <dt className="text-muted-foreground">Base Fare / km</dt>
+                  <dd className="text-right font-medium">{formatRupiah(activeSetting.baseFare)}</dd>
+                  <dt className="text-muted-foreground">Min Kilometer</dt>
+                  <dd className="text-right font-medium">{activeSetting.minKm} km</dd>
+                  <dt className="text-muted-foreground">Max Kilometer</dt>
+                  <dd className="text-right font-medium">{activeSetting.maxKm} km</dd>
+                  <dt className="text-muted-foreground">Berlaku Mulai</dt>
+                  <dd className="text-right font-medium">{formatDateID(activeSetting.berlakuMulai)}</dd>
+                </dl>
+              ) : (
+                <p className="text-destructive text-xs">
+                  Setting tunjangan belum dikonfigurasi untuk periode ini.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Calculation rules */}
+          <div>
+            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide mb-1">
+              Aturan Perhitungan
+            </p>
+            <ul className="text-sm space-y-1 list-disc pl-4">
+              <li>
+                Formula: <code className="bg-muted rounded px-1 text-xs">baseFare × km × hariMasuk</code>
+              </li>
+              <li>Pembulatan km: desimal &lt; 0,5 ke bawah, ≥ 0,5 ke atas.</li>
+              <li>Jarak di bawah min km atau di atas max km tidak dihitung.</li>
+              <li>Hari masuk minimum 19 hari kerja untuk mendapat tunjangan.</li>
+              <li>Hanya pegawai tetap (PKWTT) & aktif yang dihitung.</li>
+            </ul>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Batal
+          </Button>
+          <Button type="button" onClick={onConfirm} disabled={loading || !activeSetting}>
+            {loading && <Loader2 className="size-4 animate-spin" />}
+            Hitung Sekarang
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TunjanganDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const queryClient = useQueryClient();
   const [id, setId] = React.useState<string | null>(null);
@@ -267,25 +384,14 @@ export default function TunjanganDetailPage({ params }: { params: Promise<{ id: 
         </CardContent>
       </Card>
 
-      <AlertDialog open={confirmHitung} onOpenChange={setConfirmHitung}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hitung Tunjangan Transport?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Sistem akan menghitung tunjangan transport untuk semua pegawai tetap (PKWTT) pada
-              periode <strong>{bulanName} {data?.tahun}</strong>. Hasil perhitungan sebelumnya
-              akan ditimpa.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleHitung} disabled={menghitung}>
-              {menghitung && <Loader2 className="size-4 animate-spin" />}
-              Hitung Sekarang
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <HitungTunjanganDialog
+        open={confirmHitung}
+        onOpenChange={setConfirmHitung}
+        bulan={data?.bulan ?? new Date().getMonth() + 1}
+        tahun={data?.tahun ?? new Date().getFullYear()}
+        onConfirm={handleHitung}
+        loading={menghitung}
+      />
     </>
   );
 }

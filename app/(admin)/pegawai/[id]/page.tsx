@@ -28,7 +28,6 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 export default function PegawaiDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter();
   const [id, setId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -99,7 +98,7 @@ export default function PegawaiDetailPage({ params }: { params: Promise<{ id: st
             <div className="mb-4 flex justify-center">
               <div className="relative size-28 overflow-hidden rounded-full border">
                 {fotoUrl ? (
-                  <Image src={fotoUrl} alt={data.namaPegawai} fill className="object-cover" sizes="112px" />
+                  <Image src={fotoUrl} alt={data.namaPegawai} fill className="object-cover" sizes="112px" unoptimized/>
                 ) : (
                   <div className="bg-muted flex size-full items-center justify-center">
                     <User2 className="text-muted-foreground size-12" />

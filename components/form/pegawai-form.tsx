@@ -9,10 +9,10 @@ import { toast } from "sonner";
 
 import { api } from "@/lib/api/client";
 import { ENDPOINTS } from "@/lib/api/endpoints";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { applyServerErrors, formatDateInput } from "@/lib/utils";
 import { pegawaiSchema, type PegawaiInput } from "@/lib/schemas/pegawai";
-import type { ApiResponse, MasterData, MasterWilayah, Pegawai } from "@/lib/api/types";
+import type { ApiResponse, MasterData, Pegawai } from "@/lib/api/types";
 import {
   JENIS_KELAMIN,
   STATUS_KAWIN,
@@ -28,10 +28,10 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { FotoUploader } from "@/components/form/foto-uploader";
 import { PendidikanList } from "@/components/form/pendidikan-list";
-// import { KecamatanAutocomplete } from "@/components/form/kecamatan-autocomplete"; // sementara nonaktif
+import { KecamatanSelect } from "@/components/form/kecamatan-select";
 
 type Props = {
-  pegawai?: Pegawai; // if provided → edit mode
+  pegawai?: Pegawai;
 };
 
 export function PegawaiForm({ pegawai }: Props) {
@@ -55,17 +55,7 @@ export function PegawaiForm({ pegawai }: Props) {
     },
   });
 
-  const { data: wilayahList } = useQuery<MasterWilayah[], Error>({
-    queryKey: ["masterWilayah"],
-    queryFn: async () => {
-      const res = await api.get<ApiResponse<MasterWilayah[]>>(ENDPOINTS.masterWilayah.list());
-      return res.data.data;
-    },
-  });
 
-  const [selectedWilayah, setSelectedWilayah] = React.useState<MasterWilayah | null>(
-    pegawai?.kecamatan ?? null,
-  );
   const [submitting, setSubmitting] = React.useState(false);
 
   const methods = useForm<PegawaiInput>({
@@ -117,7 +107,6 @@ export function PegawaiForm({ pegawai }: Props) {
     formState: { errors },
   } = methods;
 
-  // Auto-compute usia from tanggalLahir
   const tanggalLahir = watch("tanggalLahir");
   const usia = React.useMemo(() => {
     if (!tanggalLahir) return "";
@@ -127,10 +116,6 @@ export function PegawaiForm({ pegawai }: Props) {
     return years >= 0 ? `${years} tahun` : "";
   }, [tanggalLahir]);
 
-  // Setelah list option (jabatan/departemen/kecamatan) selesai di-fetch,
-  // paksa setValue agar <select> re-render dan menampilkan option yang cocok.
-  // Tanpa ini, value sudah di-set oleh defaultValues tapi <option> belum ada
-  // sehingga browser menampilkan placeholder kosong.
   React.useEffect(() => {
     if (jabatanList && jabatanList.length > 0 && pegawai?.idJabatan) {
       setValue("idJabatan", Number(pegawai.idJabatan), { shouldValidate: true });
@@ -143,14 +128,6 @@ export function PegawaiForm({ pegawai }: Props) {
     }
   }, [departemenList, pegawai?.idDepartemen, setValue]);
 
-  const idKecamatan = watch("idKecamatan");
-  React.useEffect(() => {
-    if (wilayahList && wilayahList.length > 0 && pegawai?.idKecamatan) {
-      setValue("idKecamatan", Number(pegawai.idKecamatan), { shouldValidate: true });
-      const w = wilayahList.find((x) => x.id === Number(pegawai.idKecamatan)) ?? null;
-      setSelectedWilayah(w);
-    }
-  }, [wilayahList, pegawai?.idKecamatan, setValue]);
 
   const onSubmit = async (data: PegawaiInput) => {
     setSubmitting(true);
@@ -175,7 +152,6 @@ export function PegawaiForm({ pegawai }: Props) {
           await api.post(ENDPOINTS.pegawai.create, fd);
         }
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { fotoPegawai: _foto, ...body } = data;
         if (isEdit) {
           await api.put(ENDPOINTS.pegawai.update(pegawai!.id), body);
@@ -185,7 +161,8 @@ export function PegawaiForm({ pegawai }: Props) {
       }
 
       toast.success(isEdit ? "Data pegawai berhasil diperbarui" : "Data pegawai berhasil ditambahkan");
-      router.push("/pegawai");
+      
+      router.push(isEdit ? `/pegawai/${pegawai!.id}` : "/pegawai");
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status: number; data: { message: string; errors?: Array<{field: string; message: string}> } } };
       if (axiosErr.response?.status === 422 && axiosErr.response.data.errors) {
@@ -369,44 +346,29 @@ export function PegawaiForm({ pegawai }: Props) {
                 {/* Alamat */}
                 <Field>
                   <FieldLabel htmlFor="idKecamatan">Kecamatan *</FieldLabel>
-                  <select
-                    id="idKecamatan"
-                    {...register("idKecamatan", { valueAsNumber: true })}
-                    className="border-input bg-transparent h-9 w-full rounded-md border px-2 text-sm"
-                    aria-invalid={!!errors.idKecamatan}
-                  >
-                    <option value="">Pilih kecamatan</option>
-                    {(wilayahList ?? []).map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.kecamatan} — {w.kabupaten}, {w.provinsi}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="idKecamatan"
+                    render={({ field }) => (
+                      <KecamatanSelect
+                        value={field.value ?? null}
+                        onChange={(wilayah) => {
+                          field.onChange(wilayah ? wilayah.id : null);
+                        }}
+                        defaultLabel={
+                          pegawai?.kecamatan
+                            ? `${pegawai.kecamatan.kecamatan} — ${pegawai.kecamatan.kabupaten}`
+                            : undefined
+                        }
+                        error={errors.idKecamatan?.message}
+                      />
+                    )}
+                  />
                   {errors.idKecamatan && (
                     <FieldError errors={[{ message: errors.idKecamatan.message }]} />
                   )}
                 </Field>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel>Kabupaten</FieldLabel>
-                    <Input
-                      value={selectedWilayah?.kabupaten ?? ""}
-                      disabled
-                      readOnly
-                      placeholder="Otomatis terisi"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel>Provinsi</FieldLabel>
-                    <Input
-                      value={selectedWilayah?.provinsi ?? ""}
-                      disabled
-                      readOnly
-                      placeholder="Otomatis terisi"
-                    />
-                  </Field>
-                </div>
 
                 <Field>
                   <FieldLabel htmlFor="alamatLengkap">Alamat Lengkap *</FieldLabel>
